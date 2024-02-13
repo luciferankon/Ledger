@@ -1,44 +1,43 @@
 package com.example.geektrust.service;
 
-import com.example.geektrust.UserLoan;
+import com.example.geektrust.command.Command;
+import com.example.geektrust.command.CommandResult;
+import com.example.geektrust.domain.Ledger;
+import com.example.geektrust.domain.Ledgers;
+import com.example.geektrust.domain.UserNotFoundException;
+import com.example.geektrust.parser.Formatter;
+import com.example.geektrust.parser.InputParser;
 
-import java.util.HashMap;
+import java.util.List;
 
 public class LedgerService {
-    HashMap<String, UserLoan> userLedger = new HashMap<>();
 
-    public LedgerService() {}
+    private final Ledgers ledgers;
 
-    public void registerLoan(String bankName, String borrowerName, float principal, int years, float roi) {
-        UserLoan userLoan = new UserLoan(principal, years, roi);
-        String borrowerBankId = getKey(bankName, borrowerName);
-        userLedger.put(borrowerBankId, userLoan);
+    public LedgerService(Ledgers ledgers) {
+        this.ledgers = ledgers;
     }
 
-    public void makePayment(String bankName, String borrowerName, int lumpsum, int emiNo) {
-        UserLoan userLoan = getUserLoan(bankName, borrowerName);
-        userLoan.pay(emiNo, lumpsum);
+    public CommandResult runCommand(Command command) throws UserNotFoundException {
+        Ledger ledger = ledgers.getLedger(command.getBank());
+        return command.execute(ledger);
     }
 
-    public void printBalance(String bankName, String borrowerName, int emiNo) {
-        UserLoan userLoan = getUserLoan(bankName, borrowerName);
-        double amountPaid = getAmountPaid(emiNo, userLoan);
-        double noOfEmiLeft = userLoan.getLeftOverEmis(emiNo);
-        System.out.println(bankName + " " + borrowerName + " " + (int) amountPaid + " " + (int) noOfEmiLeft);
+    public TransactionStatus execute(String cmd) {
+        TransactionStatus transactionStatus = new TransactionStatus();
+        try {
+            Command command = InputParser.parse(cmd);
+            CommandResult result = this.runCommand(command);
+            return transactionStatus.setResult(result);
+        } catch (Exception e) {
+            return transactionStatus.setError(e);
+        }
     }
 
-    private static String getKey(String bankName, String borrowerName) {
-        return bankName + borrowerName;
-    }
-
-    private UserLoan getUserLoan(String bankName, String borrowerName) {
-        String borrowerBankId = getKey(bankName, borrowerName);
-        return userLedger.get(borrowerBankId);
-    }
-
-    private static double getAmountPaid(int emiNo, UserLoan userLoan) {
-        double lumpSumPayments = userLoan.getLumpSumPayments(emiNo);
-        double emiPaid = userLoan.getEmiPaid(emiNo);
-        return emiPaid + lumpSumPayments;
+    public static void executeCommands(LedgerService ledgerService, List<String> commands, Formatter consoleFormatter) {
+        for (String cmd : commands) {
+            TransactionStatus transactionStatus = ledgerService.execute(cmd);
+            transactionStatus.print(consoleFormatter);
+        }
     }
 }
